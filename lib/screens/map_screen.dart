@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   runApp(MyApp());
@@ -19,78 +20,77 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  GoogleMapController? _mapController;
-  LatLng _currentPosition = LatLng(37.7749, -122.4194); // Default position
-  Set<Marker> _markers = {};
-
+  LatLng? _currentLocation;
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
+    _getUserLocation();
   }
 
-  Future<void> _getCurrentLocation() async {
+  Future<void> _getUserLocation() async {
     bool serviceEnabled;
     LocationPermission permission;
 
+    // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      print("Location services are disabled.");
       return;
     }
 
+    // Check location permissions
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.deniedForever) {
-        print("Location permissions are permanently denied.");
         return;
       }
     }
 
+    // Get the user's location
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
 
     setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _markers = {
-        Marker(
-          markerId: MarkerId('currentLocation'),
-          position: _currentPosition,
-          infoWindow: InfoWindow(title: 'Your Location'),
-        ),
-      };
+      _currentLocation = LatLng(position.latitude, position.longitude);
     });
-
-    // Move camera to current location
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: _currentPosition, zoom: 15),
-      ),
-    );
+    print(_currentLocation);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('User Location Tracking')),
-      body: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: _currentPosition,
-          zoom: 15,
+    return FlutterMap(
+      options: MapOptions(
+        initialCenter: _currentLocation ?? LatLng(17.649685, 73.463880),
+        initialZoom: 11,
+        interactionOptions: const InteractionOptions(
+          flags: ~InteractiveFlag.doubleTapZoom,
         ),
-        onMapCreated: (GoogleMapController controller) {
-          _mapController = controller;
-        },
-        markers: _markers,
-        myLocationEnabled: true, // Show blue dot for current location
-        myLocationButtonEnabled: true, // Show "locate me" button
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _getCurrentLocation,
-        child: Icon(Icons.my_location),
-      ),
+      children: [
+        openStreetMapTileLayer,
+        MarkerLayer(
+          markers: [
+            if (_currentLocation != null)
+              Marker(
+                point: _currentLocation!,
+                width: 60,
+                height: 60,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.person_pin_circle,
+                  size: 60,
+                  color: Colors.red,
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
+
+TileLayer get openStreetMapTileLayer => TileLayer(
+  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  userAgentPackageName: 'dev.fleaflet.flutter_map.example',
+);
